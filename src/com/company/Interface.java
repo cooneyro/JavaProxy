@@ -1,8 +1,6 @@
 package com.company;
 
-/**
- * Created by Rob on 18/02/2017.
- */
+
 import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -21,44 +19,45 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.text.DefaultCaret;
 
 /**
  *  Management console (user interface) for proxy)
  *  Allows user to block and unblock hosts
  *  Also allows viewing of cache contents
- *
  */
 public class Interface {
 
-    private JFrame frmWebProxy;
-    private JTextField infoField;
-    private static JTextArea txtInfoArea;
-    private static JScrollPane txtInfoScrollPane;
-    static Main proxyMainThread;
-    private static Lock l;
-    public static PrintStream originalSystemOut;
+    private JFrame frame;
+    private JTextField textField;
+    private static JTextArea textArea;
+    private static Lock lock;
+    private static PrintStream originalSystemOut;
 
     public static void main(String[] args) {
-        l = new ReentrantLock();
+        lock = new ReentrantLock();
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException
-                | UnsupportedLookAndFeelException e1) {
+        } catch (Exception e1) {
             e1.printStackTrace();
         }
+
+        /* Make management console visible */
+
         EventQueue.invokeLater(new Runnable() {
             public void run() {
                 try {
                     Interface window = new Interface();
-                    window.frmWebProxy.setVisible(true);
+                    window.frame.setVisible(true);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
         });
-        proxyMainThread = new Main();
+
+        /* Set up main port listener */
+
+        Main proxyMainThread = new Main();
         String[] arguments = {};
         try{
             proxyMainThread.main(arguments);
@@ -70,41 +69,51 @@ public class Interface {
 
     }
 
+    /* Constructor */
+
     public Interface() {
         initialize();
-        setUpSystemOut();
     }
 
-    private void setUpSystemOut() {
-        originalSystemOut = System.out;
-        System.setOut(new PrintStream(new OutputStream() {
-            @Override
-            public void write(int arg0) throws IOException {
-                consolePrint((char) arg0 + "", false);
-            }
-        }));
-    }
+    /* Sets up user interface for proxy management */
 
     private void initialize() {
-        frmWebProxy = new JFrame();
-        frmWebProxy.addWindowListener(new WindowAdapter() {
+        frame = new JFrame();
+        frame.addWindowListener(new WindowAdapter() {
             public void windowClosing(WindowEvent e) {
                 System.setOut(originalSystemOut);
-                frmWebProxy.dispose();
-                TrafficFilter.getInstance().writeBlockedHosts(); /** writes blocked hosts to file*/
+                frame.dispose();
+                HostBlocking.getInstance().writeBlockedHosts(); /* writes blocked hosts to file */
             }
         });
-        frmWebProxy.setTitle("Proxy Management Console");
-        frmWebProxy.setBounds(100, 100, 750, 450);
-        frmWebProxy.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frmWebProxy.setResizable(false);
 
+        /* Defining bounds for user interface */
+
+        frame.setTitle("Proxy Management Console");
+        frame.setBounds(100, 100, 750, 450);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setResizable(false);
+
+        /* Setting menu and text areas */
         JMenuBar menuBar = new JMenuBar();
-        frmWebProxy.setJMenuBar(menuBar);
+        frame.setJMenuBar(menuBar);
+        textArea = new JTextArea(10, 60);
+        textArea.setLineWrap(true);
+        JScrollPane txtInfoScrollPane = new JScrollPane(textArea);
+        txtInfoScrollPane.setBounds(15, 120, 720, 225);
+        txtInfoScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+        frame.getContentPane().add(txtInfoScrollPane);
+        DefaultCaret caret = (DefaultCaret) textArea.getCaret();
+        caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
+        textField = new JTextField();
+        textField.setBounds(15, 70, 720, 40);
+        frame.getContentPane().add(textField);
+        textField.setColumns(10);
 
+        /* Creating button to show cache contents when clicked */
 
-        JButton mntmOpenFile = new JButton("Show Cache");
-        mntmOpenFile.addActionListener(new ActionListener() {
+        JButton showCache = new JButton("Show Cache");
+        showCache.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 CacheMgr manager = CacheMgr.getInstance();
                 CacheObject[] cachedObjects = manager.getCache();
@@ -112,7 +121,7 @@ public class Interface {
                         "***********CACHE***CONTENTS**********",
                         true);
                 for (int i = 0; i < cachedObjects.length; i++) {
-                    consolePrint("|" + cachedObjects[i].getDate().toString() + "|" + cachedObjects[i].getMaxAge()
+                    consolePrint("|" + cachedObjects[i].getDate().toString() + "|" + cachedObjects[i].getExpiryAge()
                             + "|" + cachedObjects[i].getKey(), true);
                     consolePrint(
                             "*****************************************************************************",
@@ -123,69 +132,56 @@ public class Interface {
                         true);
             }
         });
-        menuBar.add(mntmOpenFile);
+        menuBar.add(showCache);
+        frame.getContentPane().setLayout(null);
 
-
-        frmWebProxy.getContentPane().setLayout(null);
+        /* Creating button to allow user to block hostname typed in text area */
 
         JButton btnBlockHost = new JButton("Block Host");
         btnBlockHost.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                String hostToBlock = infoField.getText();
+                String hostToBlock = textField.getText();
                 if (!hostToBlock.isEmpty()) {
-                    infoField.setText("");
-                        TrafficFilter.getInstance().addBlockedHost(hostToBlock);
-                        txtInfoArea.append("Blocked Host: " + hostToBlock + "\n");
+                    textField.setText("");
+                        HostBlocking.getInstance().blockHost(hostToBlock);
+                        textArea.append("Blocked Host: " + hostToBlock + "\n");
                 } else {
-                    txtInfoArea.append("You need to enter a host.\n");
+                    textArea.append("You need to enter a host.\n");
                 }
             }
         });
         btnBlockHost.setBounds(15, 15, 350, 37);
-        frmWebProxy.getContentPane().add(btnBlockHost);
+        frame.getContentPane().add(btnBlockHost);
 
-
+        /* Creating button to unblock hostname typed in text area */
 
         JButton btnUnblockHost = new JButton("Unblock Host");
         btnUnblockHost.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                String hostToUnblock = infoField.getText();
-                infoField.setText("");
-                TrafficFilter.getInstance().removeBlockedHost(hostToUnblock);
-                txtInfoArea.append("Unblocked Host: " + hostToUnblock + "\n");
+                String hostToUnblock = textField.getText();
+                textField.setText("");
+                HostBlocking.getInstance().unblockHost(hostToUnblock);
+                textArea.append("Unblocked Host: " + hostToUnblock + "\n");
             }
         });
         btnUnblockHost.setBounds(380, 15, 350, 37);
-        frmWebProxy.getContentPane().add(btnUnblockHost);
+        frame.getContentPane().add(btnUnblockHost);
 
 
-
-
-        txtInfoArea = new JTextArea(10, 60);
-        txtInfoArea.setLineWrap(true);
-        txtInfoScrollPane = new JScrollPane(txtInfoArea);
-        txtInfoScrollPane.setBounds(15, 120, 720, 225);
-        txtInfoScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-        frmWebProxy.getContentPane().add(txtInfoScrollPane);
-        DefaultCaret caret = (DefaultCaret) txtInfoArea.getCaret();
-        caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
-
-        infoField = new JTextField();
-        infoField.setBounds(15, 70, 720, 40);
-        frmWebProxy.getContentPane().add(infoField);
-        infoField.setColumns(10);
 
     }
 
-    public static void consolePrint(String s, boolean addNewLine) {
-        l.lock();
+    /** Prints to management console, with newline if (newL) */
+    
+    static void consolePrint(String s, boolean newL) {
+        lock.lock();
         try {
-            if (addNewLine) {
+            if (newL) {
                 s += "\n";
             }
-            txtInfoArea.append(s);
+            textArea.append(s);
         } finally {
-            l.unlock();
+            lock.unlock();
         }
     }
 }

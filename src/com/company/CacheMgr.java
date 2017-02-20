@@ -1,8 +1,5 @@
 package com.company;
 
-/**
- * Created by Rob on 18/02/2017.
- */
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Hashtable;
@@ -11,11 +8,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
-
-/** CacheMgr manages all CacheObjects
- *  CacheObjects are stored in hashtable
- *  URL is the hash key and the value is the CacheObject
- *  Cache is not persistent
+/**
+ * CacheMgr manages all CacheObjects
+ * CacheObjects are stored in hashtable
+ * URL is the hash key and the value is the CacheObject
+ * Cache is not persistent
  */
 public class CacheMgr {
     // Used by locking system
@@ -23,12 +20,12 @@ public class CacheMgr {
     private static final long maxWait = 50;
     private static final TimeUnit timeUnit = TimeUnit.MILLISECONDS;
 
-    // This is the ONLY instance of this class in the whole program.
     private static CacheMgr instance = new CacheMgr();
 
+    // Hashtable used to store CacheObjects
     private static Hashtable<String, CacheObject> cache = new Hashtable<>();
     private static ReentrantReadWriteLock cacheLock;
-    private Calendar c = Calendar.getInstance();
+
     private CacheMgr() {
         // Check to see if a lock already exists, create it if not
         if (cacheLock == null) {
@@ -37,44 +34,49 @@ public class CacheMgr {
 
     }
 
-    /** Returns instance of this class*/
-
+    /**
+     * Returns instance of this class
+     */
     public static CacheMgr getInstance() {
         return instance;
     }
 
-    /** Checks for cached URL */
-
-    public synchronized boolean isCached(String url) {
+    /**
+     * Checks for cached URL
+     */
+    synchronized boolean isCached(String url) {
         boolean result = false;
         try {
-            try {
-		/*
-		 * Get copy of result if cached
-		 */
-                if (cacheLock.readLock().tryLock(maxWait, timeUnit)) {
-                    result = cache.containsKey(url);
-                    if (result) {
-                        CacheObject r = cache.get(url);
-                        cacheLock.readLock().unlock();
-			    /*
-			     * Check that cached object has not expired
-			     */
-                        Date d = r.getDate();
-                        c.setTime(d);
-                        c.add(Calendar.SECOND, (int)r.getMaxAge());
-                        if (c.after(d)) {
-                            result = false;
-                            cacheLock.writeLock().lock();
-                            cache.remove(url);
-                            cacheLock.writeLock().unlock();
-                        }
-                    } else {
-                        cacheLock.readLock().unlock();
+            /* maxWait prevents deadlock when trying to read from cache
+             * while ensuring data integrity */
+
+            if (cacheLock.readLock().tryLock(maxWait, timeUnit)) {
+                result = cache.containsKey(url);
+
+                /* Get copy of result if cached */
+
+                if (result) {
+                    CacheObject r = cache.get(url);
+                    cacheLock.readLock().unlock();
+
+			     /* Check that cached object has not expired */
+
+                    Calendar c = Calendar.getInstance();
+                    Date d = r.getDate();
+                    c.setTime(d);
+                    c.add(Calendar.SECOND, (int) r.getExpiryAge());
+
+                        /* If cached object has expired, remove it and return false
+                        * ie this object is not (should not be) in cache*/
+                    if (c.after(d)) {
+                        result = false;
+                        cacheLock.writeLock().lock();
+                        cache.remove(url);
+                        cacheLock.writeLock().unlock();
                     }
+                } else {
+                    cacheLock.readLock().unlock();
                 }
-            } finally {
-                cacheLock.readLock();
             }
         } catch (InterruptedException e) {
             result = false;
@@ -82,9 +84,10 @@ public class CacheMgr {
         return result;
     }
 
-    /** Returns data stored inside cached object**/
-
-    public synchronized CacheObject getData(String url) {
+    /**
+     * Returns CacheObject associated with url passed to function
+     **/
+    synchronized CacheObject getData(String url) {
         CacheObject result = null;
         if (isCached(url)) {
             try {
@@ -98,14 +101,17 @@ public class CacheMgr {
         return result;
     }
 
-    /** Add items to cache**/
-
-    public synchronized boolean cacheIn(String url, CacheObject data) {
-        if(data==null){
+    /**
+     * Add items to cache, returning true if data could be cached
+     * or false if not cached
+     **/
+    synchronized boolean cacheIn(String url, CacheObject data) {
+        if (data == null) {
             return false;
         }
         boolean result = false;
         try {
+            /* maxWait prevents deadlock when attempting to cache */
             if (cacheLock.writeLock().tryLock(maxWait, timeUnit)) {
                 cache.put(url, data);
                 result = true;
@@ -114,20 +120,22 @@ public class CacheMgr {
         } catch (InterruptedException e) {
             try {
                 cacheLock.writeLock().unlock();
-            } catch (IllegalMonitorStateException f) {
+            } catch (Exception f) {
             }
         }
         return result;
     }
 
-    /** Return cache in its entirety */
-
-    public CacheObject[] getCache() {
+    /**
+     * Return cache in its entirety in array of CacheObjects
+     * Uses readLock to ensure integrity of data returned
+     */
+    CacheObject[] getCache() {
         CacheObject[] result = null;
         try {
             if (cacheLock.readLock().tryLock()) {
-                Set<String> keys = cache.keySet();
-                String[] k = new String[keys.size()];
+                Set<String> keys = cache.keySet();  // gets keys of all objects in cache
+                String[] k = new String[keys.size()]; // and returns cache object corresponding to each
                 result = new CacheObject[keys.size()];
                 keys.toArray(k);
                 for (int i = 0; i < k.length; i++) {

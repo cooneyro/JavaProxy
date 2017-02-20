@@ -2,85 +2,117 @@ package com.company;
 
 import java.util.Date;
 
-/** For transporting information between cache and ProxyThread */
+/**
+ * For transporting information between Cache and ProxyThread
+ */
 
 public class CacheObject {
     public String header;
     private String method;
-    private boolean noCache;
-    private boolean isPrivate;
-    private boolean isPublic;
-    private boolean noModify;
-    private long maxAge;
-    private Date date;
-    private byte[] data;
-    private String key;
+    private boolean privateCache = false; // Represents if cache is private
+    private boolean publicCache = false;  // or public
+    private boolean noCache = false;      // true if data is not cachable
+    private long expiryAge = 100;         // maximum age of cache object before it expires
+    private Date date = new Date(0);// date brought into cache
+    private byte[] data = null;
+    private String key = null;
 
     /**
      * Construct a new Cache Object
      */
-    public CacheObject() {
-        setNoCache(false);
-        setPrivate(false);
-        setPublic(false);
-        setNoModify(false);
-        setAvailableAge(100);
-        setDate(new Date(0));
-        setData(null);
-        setKey(null);
+    CacheObject() {
         setMethod("404");
     }
 
+    /**
+     * For putting data into cache object
+     */
+    public void setData(byte[] data) {
+        this.data = data;
+    }
 
-    public boolean isCachable() {
+    /**
+     * Check if data can be cached
+     */
+    boolean canBeCached() {
         return (!noCache);
     }
 
-    public void setNoCache(boolean noCache) {
-        this.noCache = noCache;
+    /**
+     * Return expiry age of object
+     */
+    long getExpiryAge() {
+        return expiryAge;
     }
 
-    public boolean isPrivate() {
-        return isPrivate;
-    }
-
-    public void setPrivate(boolean isPrivate) {
-        this.isPrivate = isPrivate;
-    }
-
-    public boolean isPublic() {
-        return isPublic;
-    }
-
-    public void setPublic(boolean isPublic) {
-        this.isPublic = isPublic;
-    }
-
-    public void setNoModify(boolean noModify) {
-        this.noModify = noModify;
-    }
-
-    public long getMaxAge() {
-        return maxAge;
-    }
-
-    public void setAvailableAge(long maxAge) {
-        this.maxAge = maxAge;
-    }
-
+    /**
+     * Return date object was cached
+     */
     public Date getDate() {
         return date;
     }
 
-    public void setDate(Date date) {
-        this.date = date;
-    }
-
+    /**
+     * Return data in cached object
+     */
     public byte[] getData() {
         return data;
     }
 
-    public void put(byte[] data) {
+    /**
+     * Get key (URL in String format) corresponding to this cache object
+     */
+    String getKey() {
+        return key;
+    }
+
+    /**
+     * Signal that this data cannot be cached
+     */
+    void setNoCache(boolean noCache) {
+        this.noCache = noCache;
+    }
+
+    /**
+     * Check if cache is set as private
+     */
+    public boolean isPrivate() {
+        return privateCache;
+    }
+
+
+    /**
+     * Set expiry age of cache object
+     */
+    public void setExpiryAge(long expiryAge) {
+        this.expiryAge = (long) expiryAge;
+    }
+
+    /**
+     * Set date that data was cached
+     */
+    public void setDate(Date date) {
+        this.date = date;
+    }
+
+    /**
+     * Set whether cache data is private
+     */
+    public void setPrivate(boolean result) {
+        this.privateCache = result;
+    }
+
+    /**
+     * Set whether cache data is public
+     */
+    public void setPublic(boolean isPublic) {
+        this.publicCache = isPublic;
+    }
+
+    /**
+     * Pass data into this cache object
+     */
+    void put(byte[] data) {
         if (this.data == null) {
             setData(data);
         } else {
@@ -88,31 +120,26 @@ public class CacheObject {
         }
     }
 
-    public void setData(byte[] data) {
-        this.data = data;
-    }
-
-    /* Add data to end of current data array
+    /**
+     * Add data to data currently existing in this cache object
      */
-    public void appendData(byte[] data) {
+    private void appendData(byte[] data) {
         byte[] newData = new byte[this.data.length + data.length];
         System.arraycopy(this.data, 0, newData, 0, this.data.length);
         System.arraycopy(data, 0, newData, this.data.length, data.length);
         this.data = newData;
     }
 
-    public String getKey() {
-        return key;
-    }
-
-    public void setKey(String key) {
+    /**
+     * Set this object's key (URL in string format)
+     */
+    void setKey(String key) {
         this.key = key;
     }
 
-    public String getMethod() {
-        return method;
-    }
-
+    /**
+     * Set this object's method
+     */
     public void setMethod(String method) {
         this.method = method;
     }

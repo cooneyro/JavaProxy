@@ -9,19 +9,21 @@ import java.util.List;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 
-/** Holds information on hosts blocked by proxy*/
-
-public class TrafficFilter {
+/**
+ * Holds information on hosts blocked by proxy
+ */
+public class HostBlocking {
 
     private BufferedReader blockedHostFile;
     private List<String> blockedHostList;
-    private static String pathToBlocked = ".blocked_hosts";
+    private static String pathToBlocked = ".blocked_hosts"; //path to file containing blocked hosts
 
-    private static TrafficFilter instance = new TrafficFilter();
+    private static HostBlocking instance = new HostBlocking();
 
-    /** Creates instance of this class */
-    
-    private TrafficFilter() {
+    /**
+     * Creates instance of this class
+     */
+    private HostBlocking() {
         if (blockedHostFile == null) {
             blockedHostFile = openFile(pathToBlocked);
         }
@@ -33,34 +35,35 @@ public class TrafficFilter {
     }
 
 
-
-
-    /** Parse host file for hosts that will be blocked */
-    
+    /**
+     * Parse host file for hosts that will be blocked
+     */
     private void retrieveBlockedHosts() {
         String hostString;
         try {
             while ((hostString = blockedHostFile.readLine()) != null) {
                 if (!hostString.startsWith("#") && !hostString.isEmpty()) {
                     if (!hostString.equals("[HOSTS]")) {
-                                blockedHostList.add(hostString.trim());
+                        blockedHostList.add(hostString.trim());
                     }
                 }
             }
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    /** Returns instance of TrafficFilter */
-
-    public static TrafficFilter getInstance() {
+    /**
+     * Returns instance of HostBlocking
+     */
+    public static HostBlocking getInstance() {
         return instance;
     }
 
 
-    /** Checks if given hostname 'host' is a blocked host */
+    /**
+     * Checks if given hostname 'host' is a blocked host
+     */
     boolean isBlockedHost(String host) {
         for (int i = 0; i < blockedHostList.size(); i++) {
             if (blockedHostList.get(i).equalsIgnoreCase(host)) {
@@ -70,14 +73,18 @@ public class TrafficFilter {
         return false;
     }
 
-    
-    
+
+    /**
+     * Block host (URL) passed to function
+     */
     void blockHost(String host) {
         blockedHostList.add(host);
     }
 
-
-    boolean removeBlockedHost(String host) {
+    /**
+     * Unblock host (URL) passed to function
+     */
+    boolean unblockHost(String host) {
         for (int i = 0; i < blockedHostList.size(); i++) {
             if (blockedHostList.get(i).equals(host)) {
                 blockedHostList.remove(i);
@@ -88,33 +95,40 @@ public class TrafficFilter {
     }
 
 
+    /**
+     * Used for reading from blocked host file
+     */
     private static BufferedReader openFile(String path) {
 
         File f;
-        BufferedReader bufReader = null;
+        BufferedReader myReader = null;
         FileReader reader;
 
         try {
             f = new File(path);
             reader = new FileReader(f);
-            bufReader = new BufferedReader(reader);
+            myReader = new BufferedReader(reader);
         } catch (IOException e) {
 
         }
-        return bufReader;
+        return myReader;
     }
 
+    /**
+     * Write to blocked host file when proxy is exited ensuring blocked host data is persistent
+     */
     void writeBlockedHosts() {
         File f = new File(pathToBlocked);
-        if (f.exists()){
+        if (f.exists()) {
             try {
                 FileWriter fw = new FileWriter(f.getAbsoluteFile());
                 BufferedWriter br = new BufferedWriter(fw);
                 br.write("[HOSTS]\n");
                 List<String> hlist = blockedHostList;
-                for (int i = 0; i < hlist.size(); i++) {
-                    System.out.print(hlist.get(i));
-                    br.write(hlist.get(i) + "\n");
+                if (hlist != null) {
+                    for (int i = 0; i < hlist.size(); i++) {
+                        br.write(hlist.get(i) + "\n");
+                    }
                 }
                 br.close();
             } catch (IOException e) {

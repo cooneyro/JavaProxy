@@ -3,22 +3,18 @@ package com.company;
 import java.io.*;
 import java.net.ServerSocket;
 
-public class Main extends Thread{
+public class Main extends Thread {
 
-    public Main(){
+    public Main() {
     }
 
     public static void main(String[] args) throws IOException {
         ServerSocket serverSocket = null;
         boolean listening = true;
 
-        int port = 443;	//default
-        try {
-            port = Integer.parseInt(args[0]);
-        } catch (Exception e) {
-        }
+        int port = 443;    //default port
 
-       try {
+        try {
             serverSocket = new ServerSocket(port);
             System.out.println("Started on port " + port);
         } catch (IOException e) {

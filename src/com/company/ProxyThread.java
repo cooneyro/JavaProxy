@@ -9,27 +9,29 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class ProxyThread extends Thread {
-    private Socket socket = null;
+
     private static final int HTTP_PORT = 80;
-    private static final int HTTPS_PORT = 443;
+    private static final int START = 0;
+
+    private Socket socket = null; //used for communication between client and proxy
+    private Socket proxySocket; // communication between proxy and web host
 
 
-    private Socket proxySocket;
-
-    private OutputStream requestOut;
-    private InputStream requestIn;
-
-    private OutputStream responseOut;
-    private InputStream responseIn;
-    private CacheObject thisObject;
+    private OutputStream requestOut; //proxy to client
+    private OutputStream responseOut; //proxy to host
+    private InputStream responseIn; //host to proxy
+    private InputStream requestIn; //client to proxy
 
 
     private CacheMgr cacheManager = CacheMgr.getInstance();
-    private TrafficFilter trafficFilter = TrafficFilter.getInstance();
+    private HostBlocking hostBlocker = HostBlocking.getInstance();
 
     private byte[] refusedData;
 
-    public ProxyThread(Socket socket) {
+    /**
+     * ProxyThread constructor taking socket as param from Main
+     */
+    ProxyThread(Socket socket) {
         super("ProxyThread");
         this.socket = socket;
         if (refusedData == null) {
@@ -37,21 +39,21 @@ public class ProxyThread extends Thread {
             try {
                 refusedData = Files.readAllBytes(path);
             } catch (IOException e) {
+                System.out.println("Error showing blocked host file");
             }
         }
     }
 
+    /**
+     * Handles opening input and output streams of data, HTTP requests and responses
+     */
     public void run() {
-        //get input from user
-        //send request to server
-        //get response from server
-        //send response to user
         try {
-
-
             boolean putInCache;
-            byte[] fromHost;
-            byte[] fromUser;
+            byte[] fromHost; // for transferring data sent by host to client
+            byte[] fromClient; // for transferring data sent by client to host
+
+            /* for handling requests and responses */
 
             RequestHandler requestHeader;
             ResponseHandler responseHeader;
@@ -59,66 +61,61 @@ public class ProxyThread extends Thread {
             requestIn = socket.getInputStream();
             requestOut = socket.getOutputStream();
 
-            /**
-	        * Get data from the user
-	        */
+            /* Get data from client. If no data received, close thread */
 
-            fromUser = dataIn();
-            if (fromUser == null) {
+            fromClient = dataIn();
+            if (fromClient == null) {
                 return;
             }
 
+            /* Check request for blocked host*/
 
-            requestHeader = new RequestHandler(fromUser);
-            if (filterHost(requestHeader.getHost())){
+            requestHeader = new RequestHandler(fromClient);
+            if (checkForBlockedHost(requestHeader.getHost())) {
                 return;
             }
 
-            /** Checks if site is cached, if so, load from cache */
+            /* Checks if site is cached, if so, load from cache */
 
             if (cacheManager.isCached(requestHeader.getUrl())) {
                 byte[] data = cacheManager.getData(requestHeader.getUrl()).getData();
                 returnResponse(data);
-                ShowCacheHit(requestHeader.getUrl(), data.length);
+                ShowCacheHit(requestHeader.getUrl());
             } else {
-                /*if(requestHeader.getMethod()== RequestHandler.METHOD.CONNECT){
-                    proxySocket = new Socket(requestHeader.getHost(), HTTPS_PORT);
-                }else{
 
-                }*/
+                /* Site isn't cached, connect to host and send request */
+
                 proxySocket = new Socket(requestHeader.getHost(), HTTP_PORT);
-                Interface.consolePrint("Connecting to\t" + requestHeader.getHost(),true);
-                
+                Interface.consolePrint("Connecting to\t" + requestHeader.getHost(), true);
+
                 responseIn = proxySocket.getInputStream();
                 responseOut = proxySocket.getOutputStream();
-                
-                sendReq(fromUser);
+
+                sendReq(fromClient);
                 fromHost = getResponse();
                 responseHeader = new ResponseHandler(fromHost);
-                thisObject = responseHeader.getCacheInfo();
-                if (thisObject!=null && thisObject.isCachable()) {
+                CacheObject thisObject = responseHeader.cachingProtocol();
+
+                /* Check if data can be cached */
+
+                if (thisObject != null && thisObject.canBeCached()) {
                     thisObject.put(fromHost);
                     putInCache = true;
                 } else {
                     putInCache = false;
                 }
-                /*if(requestHeader.getMethod()== RequestHandler.METHOD.CONNECT){
-                    String ConnectResponse = "HTTP/1.1 200 Connection Established\r\n" +
-                            "Proxy-agent:CS3031 Server/1.0\r\n" +
-                            "\r\n";
-                    byte[] response = ConnectResponse.getBytes();
-                    returnResponse(response);
-                }else{*/
-                    returnResponse(fromHost);
-                //}
+
+                /* Transfer response data to client from host */
+
+                returnResponse(fromHost);
 
 
                 while (socket.isConnected() && proxySocket.isConnected()) {
 
 
-		            /* Data from host for user*/
+		            /* Data to be transferred to client from host */
 
-                    if (responseIn.available() != 0) {
+                    if (checkRequestIn()) {
                         fromHost = getResponse();
                         returnResponse(fromHost);
                         if (putInCache) {
@@ -126,154 +123,154 @@ public class ProxyThread extends Thread {
                         }
                     }
 
-		            /* Data from user for host */
+		            /* Data to be transferred to host from client */
 
-                    if (requestIn.available() != 0) {
-
-                        fromUser = dataIn();
-                        sendReq(fromUser);
+                    if (checkResponseIn()) {
+                        fromClient = dataIn();
+                        sendReq(fromClient);
                     }
 
-                    if (requestIn.available() == 0
-                            && requestIn.available() == 0) {
+                    /* Puts thread to sleep for 120ms to allow for possible delay in sending*/
+                    if (!checkReqRespIn()) {
                         try {
-                            Thread.sleep(100);
+                            Thread.sleep(120);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
 
-                        if (requestIn.available() == 0
-                                && responseIn.available() == 0) {
+                        if (!checkReqRespIn()){
                             break;
                         }
                     }
                 }
+                /* Write to cache if necessary/possible */
                 writeCache(thisObject, requestHeader.getUrl());
 
-
             }
-
-            closeConnection();
-            closeDataStreams();
-
-            } catch(IOException e){
-                e.printStackTrace();
-            }
+            /* Close all open socket connections and data streams*/
+            closeAllConnections();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
 
     }
 
-
+    /**
+     * Get data sent by client to host
+     */
     private byte[] dataIn() throws IOException {
-        byte[] byteBuffer;
+        byte[] inputData;
         byte[] byteTmp = new byte[getMaxBufferSize()];
-        int size = requestIn.read(byteTmp, 0, byteTmp.length);
+        int size = requestIn.read(byteTmp, START, byteTmp.length);
         if (size <= 0) {
             return null;
         }
-        byteBuffer = new byte[size];
-        System.arraycopy(byteTmp, 0, byteBuffer, 0, size);
-        return byteBuffer;
+        inputData = new byte[size];
+        System.arraycopy(byteTmp, START, inputData, START, size);
+        return inputData;
     }
 
-    private void sendReq(byte[] byteBuffer) throws IOException {
-        responseOut.write(byteBuffer, 0, byteBuffer.length);
+    private void sendReq(byte[] outputData) throws IOException {
+        responseOut.write(outputData, START, outputData.length);
     }
 
+    /**
+     * Retrieve response from host
+     */
     private byte[] getResponse() throws IOException {
         byte[] result;
         byte[] byteTmp = new byte[getMaxBufferSize()];
-        int size = responseIn.read(byteTmp, 0, byteTmp.length);
+        int size = responseIn.read(byteTmp, START, byteTmp.length);
         if (size <= 0) {
             return null;
         }
         result = new byte[size];
-        System.arraycopy(byteTmp, 0, result, 0, size);
+        System.arraycopy(byteTmp, START, result, START, size);
         return result;
     }
 
-    private void returnResponse(byte[] byteBuffer) throws IOException {
-        requestOut.write(byteBuffer, 0, byteBuffer.length);
+    /**
+     * Transfer response from host to client
+     */
+    private void returnResponse(byte[] responseData) throws IOException {
+        requestOut.write(responseData, START, responseData.length);
         requestOut.flush();
     }
 
-    private void closeDataStreams() throws IOException {
+
+    /**
+     * If user attempts to access blocked host
+     * show blocked_host html page and shut down thread
+     */
+    private void ifBlocked() {
+        byte[] data = retrieveBlockPage();
+        try {
+            returnResponse(data);
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+        try{
+            closeAllConnections();
+        }catch(IOException e){
+        }
+    }
+
+    /**
+     * Close all open connections to sockets and datastreams
+     */
+    private void closeAllConnections() throws IOException {
+        try {
+            socket.close();
+            proxySocket.close();
+        } catch (NullPointerException e) {
+        }
         try {
             requestIn.close();
             requestOut.close();
             responseIn.close();
             responseOut.close();
         } catch (NullPointerException e) {
-            System.out.println("Null pointer exception");
-        }
-    }
-
-    private void closeConnection() {
-        try {
-            socket.close();
-            proxySocket.close();
-        } catch (IOException e) {
-            System.out.println("IO Exception");
         }
     }
 
 
-
-    /** If user attempts to access blocked host
-     *  show blocked_host html page and shut down thread
+    /**
+     * Check if host is blocked
      */
-    private void doActionIfBlocked() {
-        byte[] data = getRefused();
-        try {
-            returnResponse(data);
-        } catch (IOException e1) {
-            e1.printStackTrace();
-        }
-        closeConnection();
-        try {
-            closeDataStreams();
-        } catch (IOException e) {
-        }
-    }
-
-
-    /** Check if host is blocked */
-
-    private boolean filterHost(String host) {
+    private boolean checkForBlockedHost(String host) {
 
         boolean blocked;
         try {
-            boolean hostIsBlocked = trafficFilter.isBlockedHost(host);
-            if (hostIsBlocked) {
-                blocked = true;
-            } else {
-                blocked = false;
-            }
+            boolean hostIsBlocked = hostBlocker.isBlockedHost(host);
+            blocked = hostIsBlocked;
         } catch (Exception e) {
             System.out.print("Error");
             blocked = false;
         }
         if (blocked) {
-            Interface.consolePrint("BLOCKED\t" + host,true);
-            doActionIfBlocked();
+            Interface.consolePrint("BLOCKED\t" + host, true);
+            ifBlocked();
             return true;
         }
         return false;
     }
 
-    /** Show cache hit on user interface */
-
-    private void ShowCacheHit(String url, int length) {
+    /**
+     * Show cache hit on user interface
+     */
+    private void ShowCacheHit(String url) {
         if (url.length() > 40) {
             url = url.substring(0, 40) + "...";
         }
-        Interface.consolePrint("**********FOUND\t" + url + " IN CACHE, SIZE=" + length + " bytes************************",true);
+        Interface.consolePrint("********************FOUND " + url + " IN CACHE*****************************", true);
     }
 
-    /** Write data to cache */
-
+    /**
+     * Write data to cache if it can be cached and is not public
+     */
     private void writeCache(CacheObject thisObject, String url) {
-        if (thisObject != null && thisObject.isCachable()) {
+        if (thisObject != null && thisObject.canBeCached()) {
             thisObject.setKey(url);
             if (!thisObject.isPrivate()) {
                 CacheMgr.getInstance().cacheIn(url, thisObject);
@@ -281,11 +278,41 @@ public class ProxyThread extends Thread {
         }
     }
 
-    private byte[] getRefused() {
+    /**
+     *  Return blocked_host page
+     */
+    private byte[] retrieveBlockPage() {
         return refusedData;
     }
 
-    private int getMaxBufferSize() { return 65536;}
+
+    /**
+     *  Return max buffer size for data streams
+     */
+    private int getMaxBufferSize() {
+        return 65536;
+    }
+
+    /**
+     *  Check if either client or host want to send data
+     */
+    private boolean checkReqRespIn() throws IOException{
+        return (checkRequestIn() || checkResponseIn());
+    }
+
+    /**
+     *  Check if client wants to send data
+     */
+    private boolean checkResponseIn() throws IOException{
+        return responseIn.available()!=0;
+    }
+
+    /**
+     *  Check if host wants to send data
+     */
+    private boolean checkRequestIn() throws IOException{
+        return requestIn.available()!=0;
+    }
 
 
 }
