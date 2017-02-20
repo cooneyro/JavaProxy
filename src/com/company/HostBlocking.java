@@ -17,12 +17,11 @@ public class TrafficFilter {
     private List<String> blockedHostList;
     private static String pathToBlocked = ".blocked_hosts";
 
-    private static TrafficFilter instance = new TrafficFilter(pathToBlocked);
+    private static TrafficFilter instance = new TrafficFilter();
 
     /** Creates instance of this class */
     
-    private TrafficFilter(String blocked) {
-        String pathToBlocked = blocked;
+    private TrafficFilter() {
         if (blockedHostFile == null) {
             blockedHostFile = openFile(pathToBlocked);
         }
@@ -44,8 +43,7 @@ public class TrafficFilter {
             while ((hostString = blockedHostFile.readLine()) != null) {
                 if (!hostString.startsWith("#") && !hostString.isEmpty()) {
                     if (!hostString.equals("[HOSTS]")) {
-                                hostString.trim();
-                                blockedHostList.add(hostString);
+                                blockedHostList.add(hostString.trim());
                     }
                 }
             }
@@ -63,7 +61,7 @@ public class TrafficFilter {
 
 
     /** Checks if given hostname 'host' is a blocked host */
-    public boolean isBlockedHost(String host) {
+    boolean isBlockedHost(String host) {
         for (int i = 0; i < blockedHostList.size(); i++) {
             if (blockedHostList.get(i).equalsIgnoreCase(host)) {
                 return true;
@@ -72,13 +70,14 @@ public class TrafficFilter {
         return false;
     }
 
-
-    public void addBlockedHost(String host) {
+    
+    
+    void blockHost(String host) {
         blockedHostList.add(host);
     }
 
 
-    public boolean removeBlockedHost(String host) {
+    boolean removeBlockedHost(String host) {
         for (int i = 0; i < blockedHostList.size(); i++) {
             if (blockedHostList.get(i).equals(host)) {
                 blockedHostList.remove(i);
@@ -89,15 +88,14 @@ public class TrafficFilter {
     }
 
 
-    public static BufferedReader openFile(String path) {
+    private static BufferedReader openFile(String path) {
 
         File f;
         BufferedReader bufReader = null;
         FileReader reader;
 
         try {
-
-            f = getFile(path);
+            f = new File(path);
             reader = new FileReader(f);
             bufReader = new BufferedReader(reader);
         } catch (IOException e) {
@@ -106,14 +104,9 @@ public class TrafficFilter {
         return bufReader;
     }
 
-    private static File getFile(String path) {
-        return new File(path);
-    }
-
-    public void writeBlockedHosts() {
+    void writeBlockedHosts() {
         File f = new File(pathToBlocked);
-        if (!f.exists()) {
-        } else {
+        if (f.exists()){
             try {
                 FileWriter fw = new FileWriter(f.getAbsoluteFile());
                 BufferedWriter br = new BufferedWriter(fw);
