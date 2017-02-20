@@ -8,6 +8,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+/**
+* ProxyThread handles sockets used for communication,
+ * data streams between client and host
+ * and HTTP requests and responses as necessary.
+ */
+
 public class ProxyThread extends Thread {
 
     private static final int HTTP_PORT = 80;
@@ -87,7 +93,7 @@ public class ProxyThread extends Thread {
                 /* Site isn't cached, connect to host and send request */
 
                 proxySocket = new Socket(requestHeader.getHost(), HTTP_PORT);
-                Interface.consolePrint("Connecting to\t" + requestHeader.getHost(), true);
+                Interface.consolePrint("Connecting to " + requestHeader.getHost(), true);
 
                 responseIn = proxySocket.getInputStream();
                 responseOut = proxySocket.getOutputStream();
@@ -250,7 +256,7 @@ public class ProxyThread extends Thread {
             blocked = false;
         }
         if (blocked) {
-            Interface.consolePrint("BLOCKED\t" + host, true);
+            Interface.consolePrint("You are currently blocked from accessing " + host, true);
             ifBlocked();
             return true;
         }
