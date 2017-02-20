@@ -1,4 +1,5 @@
-.eml
+ProxyServer.eml
 .classpath
 .project
-.cache
+.cache/
+out/
