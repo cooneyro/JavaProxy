@@ -12,6 +12,7 @@ public class ProxyThread extends Thread {
 
     private static final int HTTP_PORT = 80;
     private static final int START = 0;
+    private static final int SLEEP_TIME = 120;
 
     private Socket socket = null; //used for communication between client and proxy
     private Socket proxySocket; // communication between proxy and web host
@@ -115,7 +116,7 @@ public class ProxyThread extends Thread {
 
 		            /* Data to be transferred to client from host */
 
-                    if (checkRequestIn()) {
+                    if (checkResponseIn()) {
                         fromHost = getResponse();
                         returnResponse(fromHost);
                         if (putInCache) {
@@ -125,7 +126,7 @@ public class ProxyThread extends Thread {
 
 		            /* Data to be transferred to host from client */
 
-                    if (checkResponseIn()) {
+                    if (checkRequestIn()) {
                         fromClient = dataIn();
                         sendReq(fromClient);
                     }
@@ -133,7 +134,7 @@ public class ProxyThread extends Thread {
                     /* Puts thread to sleep for 120ms to allow for possible delay in sending*/
                     if (!checkReqRespIn()) {
                         try {
-                            Thread.sleep(120);
+                            Thread.sleep(SLEEP_TIME);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
